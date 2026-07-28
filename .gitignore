@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.deps/
+.venv/
+outputs/
+scratch/
+test.mp4
+test_voice.mp3
+.DS_Store

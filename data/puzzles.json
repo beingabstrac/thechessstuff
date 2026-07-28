@@ -1,0 +1,47 @@
+[
+  {
+    "id": 1,
+    "title": "The Smothered Knight Mate",
+    "difficulty": "easy",
+    "fen": "5r1k/6pp/7N/8/2Q5/8/5PPP/6K1 w - - 0 1",
+    "pgn": "1. Qg8+ Rxg8 2. Nf7#",
+    "setup_fen": "5r1k/6pp/7N/8/2Q5/8/5PPP/6K1 w - - 0 1",
+    "solution_moves": ["c4g8", "f8g8", "h6f7"],
+    "commentary": [
+      "White to play and mate in 2 moves!",
+      "First, White plays a brilliant Queen sacrifice with Qg8 check!",
+      "Rook is forced to capture on g8, smothering their own King.",
+      "And Knight to f7 is a beautiful smothered checkmate!"
+    ]
+  },
+  {
+    "id": 2,
+    "title": "The Opera Game Queen Sacrifice",
+    "difficulty": "medium",
+    "fen": "4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w k - 0 1",
+    "pgn": "1. Qb8+ Nxb8 2. Rd8#",
+    "setup_fen": "4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w k - 0 1",
+    "solution_moves": ["b3b8", "d7b8", "d1d8"],
+    "commentary": [
+      "Morphy's famous Opera Game position. White to move and mate in 2!",
+      "White launches a stunning Queen sacrifice with Qb8 check!",
+      "Black is forced to take the Queen with Knight to b8.",
+      "And Rook to d8 delivers back-rank checkmate!"
+    ]
+  },
+  {
+    "id": 3,
+    "title": "Giuoco Piano Tactical Trap",
+    "difficulty": "easy",
+    "fen": "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 1",
+    "pgn": "1. Nxe5 Nxe5 2. d4 Bxd4 3. Qxd4",
+    "setup_fen": "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 0 1",
+    "solution_moves": ["f3e5", "c6e5", "d2d4"],
+    "commentary": [
+      "A classic center fork trick in the Italian Opening!",
+      "White sacrifices the Knight with Nxe5!",
+      "After Black recaptures with Nxe5, White plays d4 forking both Bishop and Knight!",
+      "White regains the piece with central control."
+    ]
+  }
+]
