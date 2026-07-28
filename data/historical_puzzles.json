@@ -551,28 +551,6 @@
     "viewerUrl": "https://chess-board.fly.dev/?fen=r1q2r1k/3bb1Np/p1p5/3pp2Q/6R1/2P1R3/1P3PPP/2B3K1 w - - 0 1"
   },
   {
-    "id": 10763,
-    "title": "Avalanche",
-    "pgn": "[Result \"*\"]\r\n[FEN \"4rr1k/pp6/1bpp4/3P2pp/B3qp2/2P2Q2/PP4K1/R1B2N1R b - - 0 1\"]\r\n\r\n1...Qxf3+ 2.Kxf3 g4+ 3.Kg2 Re2# *",
-    "date": "2007-05-30",
-    "video": [],
-    "comment_count": 35,
-    "solved_count": 728,
-    "parsed": {
-      "moves": [
-        "Qxf3+",
-        "Kxf3",
-        "g4+",
-        "Kg2",
-        "Re2#"
-      ],
-      "raw": "1...Qxf3+ 2.Kxf3 g4+ 3.Kg2 Re2# *",
-      "result": "*",
-      "fen": "4rr1k/pp6/1bpp4/3P2pp/B3qp2/2P2Q2/PP4K1/R1B2N1R b - - 0 1"
-    },
-    "viewerUrl": "https://chess-board.fly.dev/?fen=4rr1k/pp6/1bpp4/3P2pp/B3qp2/2P2Q2/PP4K1/R1B2N1R b - - 0 1"
-  },
-  {
     "id": 40,
     "title": "Setting Up a Back-rank Mate",
     "pgn": "[FEN \"3r1bk1/ppq3pp/2p5/2P2Q1B/8/1P4P1/P6P/5RK1 w - - 0 1\"]\r\n[PlyCount \"3\"]\r\n\r\n1. Bf7+ 1... Kh8 2. Be8 $3 Rxe8 3. Qxf8+ Rxf8 4. Rxf8# *",

@@ -263,6 +263,67 @@ def fetch_historical_puzzle(target_date_str, fallback_index=0):
         print(f"Notice: Historical fetch for {target_date_str} ({e})")
     return None
 
+def parse_pgn_solution(pgn_str):
+    if not pgn_str:
+        return None, [], []
+        
+    clean_str = re.sub(r'\$\d+', '', pgn_str)
+    
+    try:
+        game = chess.pgn.read_game(io.StringIO(clean_str))
+        if game:
+            b = game.board()
+            moves_san = []
+            moves_uci = []
+            for move in game.mainline_moves():
+                moves_san.append(b.san(move))
+                moves_uci.append(move.uci())
+                b.push(move)
+            if moves_san and moves_uci:
+                return game.board().fen(), moves_san, moves_uci
+    except Exception:
+        pass
+        
+    fen_match = re.search(r'\[FEN \"([^\"]+)\"\]', pgn_str)
+    fen = fen_match.group(1) if fen_match else None
+    if not fen:
+        return None, [], []
+        
+    b = chess.Board(fen)
+    b_init = chess.Board(fen)
+    
+    body = re.sub(r'\{[^}]*\}', '', clean_str)
+    body = re.sub(r'\([^)]*\)', '', body)
+    lines = [line for line in body.splitlines() if not line.startswith('[')]
+    text = ' '.join(lines)
+    
+    moves_san = []
+    moves_uci = []
+    
+    tokens = text.split()
+    for token in tokens:
+        token = re.sub(r'^\d+\.+', '', token)
+        token = token.strip('.*#+$ \t\r\n')
+        if not token or token in ['*', '1-0', '0-1', '1/2-1/2']:
+            continue
+        try:
+            m = b.parse_san(token)
+            moves_san.append(b.san(m))
+            moves_uci.append(m.uci())
+            b.push(m)
+        except Exception:
+            try:
+                m = b.parse_uci(token)
+                moves_san.append(b.san(m))
+                moves_uci.append(m.uci())
+                b.push(m)
+            except Exception:
+                pass
+                
+    if moves_san and moves_uci:
+        return b_init.fen(), moves_san, moves_uci
+    return None, [], []
+
 def load_puzzle_data():
     prog = load_progress()
     next_offset = prog.get("next_offset", 0)
@@ -297,20 +358,7 @@ def load_puzzle_data():
     if hist_puzzle and hist_puzzle.get("pgn"):
         pgn = hist_puzzle["pgn"]
         title = hist_puzzle.get("title", f"Tactical Puzzle #{p_num}")
-        moves_uci = []
-        moves_san = []
-        fen = None
-        try:
-            game = chess.pgn.read_game(io.StringIO(pgn))
-            if game:
-                fen = game.board().fen()
-                b = game.board()
-                for move in game.mainline_moves():
-                    moves_san.append(b.san(move))
-                    moves_uci.append(move.uci())
-                    b.push(move)
-        except Exception as e:
-            print(f"Error parsing PGN: {e}")
+        fen, moves_san, moves_uci = parse_pgn_solution(pgn)
             
         if fen and moves_san and moves_uci:
             commentary, outro_text = generate_human_narration(fen, moves_san)
