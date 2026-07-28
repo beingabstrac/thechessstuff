@@ -526,7 +526,22 @@ def make_voice_clip(text, out_wav, voice_index=0):
         except Exception:
             pass
 
-    # 3. macOS native TTS fallback if on Mac
+    # 3. Try gTTS (Google Text-to-Speech) fallback (Cross-platform on Linux & Mac)
+    try:
+        from gtts import gTTS
+        tts = gTTS(text=text, lang="en", tld="com")
+        tts.save(mp3_tmp)
+        if os.path.exists(mp3_tmp) and os.path.getsize(mp3_tmp) > 500:
+            res = subprocess.run(["ffmpeg", "-y", "-i", mp3_tmp, "-ar", "44100", "-ac", "1", str(out_wav)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if os.path.exists(mp3_tmp):
+                os.remove(mp3_tmp)
+            if res.returncode == 0 and os.path.exists(out_wav) and os.path.getsize(out_wav) > 1000:
+                print(f"gTTS fallback generated voice clip for: '{text[:30]}...'")
+                return True
+    except Exception as e:
+        print(f"gTTS notice: {e}")
+
+    # 4. macOS native TTS fallback if on Mac
     if sys.platform == "darwin":
         try:
             aiff_tmp = str(out_wav).replace(".wav", ".aiff")
