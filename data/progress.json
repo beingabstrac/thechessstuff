@@ -1,4 +1,6 @@
 {
-  "next_offset": 0,
-  "difficulty": "easy"
+  "next_offset": 1,
+  "difficulty": "easy",
+  "last_puzzle_id": 1,
+  "last_title": "Unstoppable mate..."
 }
