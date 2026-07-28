@@ -113,17 +113,19 @@ def load_progress():
     return {"next_offset": 0, "difficulty": "easy"}
 
 def fetch_chess_com_puzzle():
-    try:
-        req = urllib.request.Request(
-            "https://api.chess.com/pub/puzzle",
-            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return data
-    except Exception as e:
-        print(f"Notice: Chess.com Live API offline or unreachable ({e}), using curated fallback pool.")
-        return None
+    for endpoint in ["https://api.chess.com/pub/puzzle/random", "https://api.chess.com/pub/puzzle"]:
+        try:
+            req = urllib.request.Request(
+                endpoint,
+                headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if data and "fen" in data and "pgn" in data:
+                    return data
+        except Exception as e:
+            print(f"Notice: Chess.com API {endpoint} ({e})")
+    return None
 
 def speakable_square(sq_name):
     if len(sq_name) == 2:
@@ -137,8 +139,8 @@ def generate_human_narration(fen, solution_moves):
     
     # 1. Realistic Human Player Openers (Hooking & Natural)
     opener_hooks = [
-        f"Wait, {opp_str} left their back rank wide open here... Can you spot the win?",
-        f"Okay, look at this position... {opp_str} thinks they're totally fine, but they're really not.",
+        f"Wait, {opp_str} left their position open here... Can you spot the win?",
+        f"Okay, look at this position... {opp_str} thinks they're fine, but they're not.",
         f"Hold on, {turn_str} has a crazy winning sequence right here! Can you find it?",
         f"Wait, can {turn_str} just force a win here? Take a look!"
     ]
@@ -148,7 +150,6 @@ def generate_human_narration(fen, solution_moves):
     curr_b = b.copy()
     
     for idx, move_item in enumerate(solution_moves):
-        # Parse move
         move = None
         if isinstance(move_item, str):
             try:
@@ -165,8 +166,6 @@ def generate_human_narration(fen, solution_moves):
 
         is_capture = curr_b.is_capture(move)
         piece = curr_b.piece_at(move.from_square)
-        target_piece = curr_b.piece_at(move.to_square) if is_capture else None
-        
         from_name = chess.square_name(move.from_square)
         to_name = chess.square_name(move.to_square)
         to_sp = speakable_square(to_name)
@@ -187,23 +186,24 @@ def generate_human_narration(fen, solution_moves):
             file_char = from_name[0].upper()
             p_name = f"the {file_char}-pawn"
 
-        # Check mate/check
         temp_b = curr_b.copy()
         temp_b.push(move)
         is_mate = temp_b.is_checkmate()
         is_check = temp_b.is_check()
         is_last = (idx == len(solution_moves) - 1)
+        is_my_turn = (curr_b.turn == b.turn)
 
         if is_mate or is_last:
-            if is_capture:
-                m_text = f"And we just take on {to_sp} with {p_name} for the win!"
+            if is_my_turn:
+                if is_capture:
+                    m_text = f"And we just take on {to_sp} with {p_name} for the win!"
+                else:
+                    m_text = f"And {p_name} to {to_sp} finishes the game!"
             else:
-                m_text = f"And {p_name} to {to_sp} is checkmate!"
+                m_text = f"They step to {to_sp}, but it's completely winning for us."
         elif idx == 0:
             if is_capture:
                 m_text = f"First, we take on {to_sp} with {p_name}."
-            elif p_type == chess.QUEEN:
-                m_text = f"First, we drop {p_name} on {to_sp}, forking both of their rooks."
             elif p_type == chess.KNIGHT:
                 m_text = f"First, we hop {p_name} to {to_sp}."
             elif p_type == chess.PAWN:
@@ -211,22 +211,29 @@ def generate_human_narration(fen, solution_moves):
             else:
                 m_text = f"First, we bring {p_name} to {to_sp}."
         else:
-            if is_capture:
-                m_text = f"They take our pawn on {to_sp} with the rook..."
-            elif is_check:
-                m_text = f"They check us on {to_sp}..."
+            if is_my_turn:
+                if is_capture:
+                    m_text = f"Then we capture on {to_sp} with {p_name}!"
+                elif is_check:
+                    m_text = f"Now we check them on {to_sp} with {p_name}!"
+                else:
+                    m_text = f"Next, we slide {p_name} to {to_sp}."
             else:
-                m_text = f"They step to {to_sp}..."
+                if is_capture:
+                    m_text = f"They capture back on {to_sp}..."
+                elif is_check:
+                    m_text = f"They check us on {to_sp}..."
+                else:
+                    m_text = f"They step to {to_sp}..."
                 
         steps.append(m_text)
         curr_b.push(move)
 
-    # 3. Realistic Human Outros (Clean tactical conclusions)
     outro_choices = [
         "What a clean tactical sequence!",
         "That is how you punish a weak position!",
         "Spotting those moves makes all the difference!",
-        "Beautiful checkmate pattern!"
+        "Beautiful tactic!"
     ]
     outro = random.choice(outro_choices)
     return [opener] + steps, outro
@@ -234,28 +241,61 @@ def generate_human_narration(fen, solution_moves):
 START_DATE = date(2007, 5, 1)
 
 def format_pretty_date(d):
-    # Formats date as 'May 1, 2007'
     return d.strftime("%B %d, %Y").replace(" 0", " ")
 
 def load_puzzle_data():
     prog = load_progress()
     next_offset = prog.get("next_offset", 0)
     
-    # Allow explicit override via env var
     force_idx = os.getenv("FORCE_PUZZLE")
     if force_idx is not None and force_idx.isdigit():
         idx = int(force_idx)
     else:
         idx = next_offset
         
-    puzzles = json.loads(PUZZLES_FILE.read_text(encoding="utf-8"))
-    p_item = puzzles[idx % len(puzzles)]
-    
-    # Calculate sequential date and number starting from May 1, 2007
     p_num = idx + 1
     p_date = START_DATE + timedelta(days=idx)
     p_date_str = format_pretty_date(p_date)
     
+    # 1. Try Live/Random Chess.com API first for a fresh, unique puzzle
+    live = fetch_chess_com_puzzle()
+    if live and "fen" in live and "pgn" in live:
+        fen = live["fen"]
+        pgn = live["pgn"]
+        title = live.get("title", f"Tactical Puzzle #{p_num}")
+        moves_uci = []
+        moves_san = []
+        try:
+            game = chess.pgn.read_game(io.StringIO(pgn))
+            if game:
+                b = game.board()
+                for move in game.mainline_moves():
+                    moves_san.append(b.san(move))
+                    moves_uci.append(move.uci())
+                    b.push(move)
+        except Exception as e:
+            print(f"Error parsing PGN: {e}")
+            
+        if moves_san and moves_uci:
+            commentary, outro_text = generate_human_narration(fen, moves_san)
+            return {
+                "id": live.get("publish_time", p_num),
+                "num": p_num,
+                "date": p_date.strftime("%Y-%m-%d"),
+                "date_str": p_date_str,
+                "title": title,
+                "difficulty": "Daily",
+                "fen": fen,
+                "pgn": pgn,
+                "solution_moves": moves_uci,
+                "solution_moves_san": moves_san,
+                "commentary": commentary,
+                "outro_text": outro_text
+            }
+
+    # 2. Fallback to local curated puzzles pool if API is unreachable
+    puzzles = json.loads(PUZZLES_FILE.read_text(encoding="utf-8"))
+    p_item = puzzles[idx % len(puzzles)]
     fen = p_item.get("setup_fen", p_item.get("fen", chess.STARTING_FEN))
     solution_moves = p_item.get("solution_moves_san", p_item.get("solution_moves", []))
     commentary, outro_text = generate_human_narration(fen, solution_moves)
