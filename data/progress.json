@@ -1,4 +1,6 @@
 {
-  "next_offset": 0,
-  "difficulty": "easy"
+  "next_offset": 3,
+  "difficulty": "easy",
+  "last_puzzle_id": 3,
+  "last_title": "Untouchable Pieces"
 }
