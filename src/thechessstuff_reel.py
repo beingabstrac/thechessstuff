@@ -434,37 +434,64 @@ def square_to_coords(square_idx, board_rect, flipped=False):
     y = top + row * sq_size
     return x, y, sq_size
 
+import asyncio
+import edge_tts
+
 def make_voice_clip(text, out_wav, voice_index=0):
-    voice = EDGE_VOICES[voice_index % len(EDGE_VOICES)]
+    primary_voice = EDGE_VOICES[voice_index % len(EDGE_VOICES)]
     mp3_tmp = str(out_wav).replace(".wav", ".mp3")
     
     # Add subtle spacing around punctuation for natural human pauses
     formatted_text = text.replace("...", "... ").replace("!", "! ").replace("?", "? ")
     
-    cmd = [
-        sys.executable, "-m", "edge_tts",
-        "--text", formatted_text,
-        "--voice", voice,
-        "--rate=-4%",
-        "--pitch=-1Hz",
-        "--write-media", mp3_tmp
-    ]
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if proc.returncode == 0 and os.path.exists(mp3_tmp):
-        subprocess.run(["ffmpeg", "-y", "-i", mp3_tmp, "-ar", "44100", "-ac", "1", str(out_wav)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if os.path.exists(mp3_tmp):
-            os.remove(mp3_tmp)
-        return True
+    candidate_voices = [primary_voice] + [v for v in EDGE_VOICES if v != primary_voice] + ["en-US-ChristopherNeural", "en-US-GuyNeural"]
     
-    # Fallback to silent wav if tts fails
-    sr = 44100
-    dur = max(1.5, len(text) * 0.06)
-    n_samples = int(sr * dur)
-    with wave.open(str(out_wav), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sr)
-        wf.writeframes(b"\x00\x00" * n_samples)
+    # 1. Try direct asyncio Python API with retries across candidate voices
+    for v_name in candidate_voices:
+        for attempt in range(2):
+            try:
+                async def _generate():
+                    communicate = edge_tts.Communicate(formatted_text, v_name, rate="-4%", pitch="-1Hz")
+                    await communicate.save(mp3_tmp)
+                asyncio.run(_generate())
+                if os.path.exists(mp3_tmp) and os.path.getsize(mp3_tmp) > 500:
+                    res = subprocess.run(["ffmpeg", "-y", "-i", mp3_tmp, "-ar", "44100", "-ac", "1", str(out_wav)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    if os.path.exists(mp3_tmp):
+                        os.remove(mp3_tmp)
+                    if res.returncode == 0 and os.path.exists(out_wav) and os.path.getsize(out_wav) > 1000:
+                        return True
+            except Exception as e:
+                print(f"TTS Notice ({v_name} attempt {attempt+1}): {e}")
+                time.sleep(0.5)
+
+    # 2. Try CLI subprocess fallback
+    for v_name in [primary_voice, "en-US-GuyNeural"]:
+        try:
+            cmd = [sys.executable, "-m", "edge_tts", "--text", formatted_text, "--voice", v_name, "--rate=-4%", "--pitch=-1Hz", "--write-media", mp3_tmp]
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if os.path.exists(mp3_tmp) and os.path.getsize(mp3_tmp) > 500:
+                subprocess.run(["ffmpeg", "-y", "-i", mp3_tmp, "-ar", "44100", "-ac", "1", str(out_wav)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if os.path.exists(mp3_tmp):
+                    os.remove(mp3_tmp)
+                if os.path.exists(out_wav) and os.path.getsize(out_wav) > 1000:
+                    return True
+        except Exception:
+            pass
+
+    # 3. macOS native TTS fallback if on Mac
+    if sys.platform == "darwin":
+        try:
+            aiff_tmp = str(out_wav).replace(".wav", ".aiff")
+            subprocess.run(["say", "-v", "Samantha", "-o", aiff_tmp, text], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            if os.path.exists(aiff_tmp):
+                subprocess.run(["ffmpeg", "-y", "-i", aiff_tmp, "-ar", "44100", "-ac", "1", str(out_wav)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                os.remove(aiff_tmp)
+                if os.path.exists(out_wav) and os.path.getsize(out_wav) > 1000:
+                    return True
+        except Exception:
+            pass
+
+    print(f"WARNING: All TTS options failed for text: '{text}'")
     return False
 
 def wav_duration(wav_path):
