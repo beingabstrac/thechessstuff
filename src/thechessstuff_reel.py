@@ -59,8 +59,10 @@ COLOR_MUTED = (160, 170, 185)
 COLOR_ACCENT = (118, 187, 72)               # Chess.com Green accent #76BB48
 
 EDGE_VOICES = [
-    "en-US-BrianNeural",
     "en-US-AndrewNeural",
+    "en-US-BrianNeural",
+    "en-US-AvaNeural",
+    "en-US-EmmaNeural",
 ]
 
 def ensure_inter_fonts():
