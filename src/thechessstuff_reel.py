@@ -805,7 +805,7 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
 
     return img
 
-def generate_reel_timeline(puzzle):
+def generate_reel_timeline(puzzle, tmp_dir):
     fen = puzzle.get("setup_fen", puzzle.get("fen", chess.STARTING_FEN))
     board = chess.Board(fen)
     b_start = chess.Board(fen)
@@ -820,168 +820,165 @@ def generate_reel_timeline(puzzle):
     frame_actions = []
     audio_events = []
     
-    with tempfile.TemporaryDirectory() as tmp_dir_str:
-        tmp_dir = Path(tmp_dir_str)
-        
-        move_sfx = SOUNDS_DIR / "move.wav"
-        capture_sfx = SOUNDS_DIR / "capture.wav"
-        check_sfx = SOUNDS_DIR / "check.wav"
-        brilliant_sfx = SOUNDS_DIR / "brilliant.wav"
-        game_over_sfx = SOUNDS_DIR / "game_over.wav"
+    move_sfx = SOUNDS_DIR / "move.wav"
+    capture_sfx = SOUNDS_DIR / "capture.wav"
+    check_sfx = SOUNDS_DIR / "check.wav"
+    brilliant_sfx = SOUNDS_DIR / "brilliant.wav"
+    game_over_sfx = SOUNDS_DIR / "game_over.wav"
 
-        current_frame = 0
-        storyboard_segments = []
+    current_frame = 0
+    storyboard_segments = []
 
-        # 1. Opener Intro
-        commentary = puzzle.get("commentary", [])
-        opener_text = commentary[0] if len(commentary) > 0 else "Alright, White to play here. Let's see what we've got."
-        opener_wav = tmp_dir / "opener.wav"
-        make_voice_clip(opener_text, opener_wav, voice_index)
-        opener_dur = wav_duration(opener_wav)
-        opener_frames = int(round(max(2.0, opener_dur) * FPS))
+    # 1. Opener Intro
+    commentary = puzzle.get("commentary", [])
+    opener_text = commentary[0] if len(commentary) > 0 else "Alright, White to play here. Let's see what we've got."
+    opener_wav = tmp_dir / "opener.wav"
+    make_voice_clip(opener_text, opener_wav, voice_index)
+    opener_dur = wav_duration(opener_wav)
+    opener_frames = int(round(max(2.0, opener_dur) * FPS))
 
-        audio_events.append((0.0, opener_wav))
-        for _ in range(opener_frames):
-            frame_actions.append({
-                "board": board.copy(),
-                "highlights": None,
-                "moving_piece": None,
-                "badges": None,
-                "text": opener_text
-            })
-        current_frame += opener_frames
-        storyboard_segments.append({"type": "opener", "text": opener_text, "duration": opener_dur})
+    audio_events.append((0.0, opener_wav))
+    for _ in range(opener_frames):
+        frame_actions.append({
+            "board": board.copy(),
+            "highlights": None,
+            "moving_piece": None,
+            "badges": None,
+            "text": opener_text
+        })
+    current_frame += opener_frames
+    storyboard_segments.append({"type": "opener", "text": opener_text, "duration": opener_dur})
 
-        # 2. Parse & Animate Solution Moves
-        solution_moves = puzzle.get("solution_moves", puzzle.get("solution_moves_san", []))
-        commentary_idx = 1
-        
-        for move_str in solution_moves:
+    # 2. Parse & Animate Solution Moves
+    solution_moves = puzzle.get("solution_moves", puzzle.get("solution_moves_san", []))
+    commentary_idx = 1
+    
+    for move_str in solution_moves:
+        try:
+            move = board.parse_uci(move_str)
+        except Exception:
             try:
-                move = board.parse_uci(move_str)
-            except Exception:
-                try:
-                    move = board.parse_san(move_str)
-                except Exception as e:
-                    print(f"Skipping unparseable move {move_str}: {e}")
-                    continue
-                    
-            from_sq = move.from_square
-            to_sq = move.to_square
-            is_capture = board.is_capture(move)
-            
-            p_moving = board.piece_at(from_sq)
-            if not p_moving:
+                move = board.parse_san(move_str)
+            except Exception as e:
+                print(f"Skipping unparseable move {move_str}: {e}")
                 continue
                 
-            p_key = f"{'w' if p_moving.color == chess.WHITE else 'b'}{p_moving.symbol().lower()}"
-            
-            # Narration for move
-            step_text = commentary[commentary_idx] if commentary_idx < len(commentary) else f"And then, {board.san(move)}."
-            commentary_idx += 1
-            
-            step_wav = tmp_dir / f"step_{current_frame}.wav"
-            make_voice_clip(step_text, step_wav, voice_index)
-            step_dur = wav_duration(step_wav)
-            
-            audio_events.append((current_frame / FPS, step_wav))
-            
-            # Fast, smooth slide animation with Motion Blur (6 frames)
-            x1, y1, sq_sz = square_to_coords(from_sq, board_rect, flipped=flipped)
-            x2, y2, _ = square_to_coords(to_sq, board_rect, flipped=flipped)
-            
-            num_move_frames = 6
-            prev_x, prev_y = x1, y1
-            for f_i in range(num_move_frames):
-                t = f_i / float(num_move_frames - 1)
-                ease_t = t * t * (3.0 - 2.0 * t)  # SmoothStep curve
-                curr_x = x1 + (x2 - x1) * ease_t
-                curr_y = y1 + (y2 - y1) * ease_t
-                
-                frame_actions.append({
-                    "board": board.copy(),
-                    "highlights": {from_sq: "orig", to_sq: "dest"},
-                    "moving_piece": {
-                        "key": p_key,
-                        "x": curr_x,
-                        "y": curr_y,
-                        "prev_x": prev_x,
-                        "prev_y": prev_y,
-                        "skip_sq": from_sq
-                    },
-                    "text": step_text
-                })
-                prev_x, prev_y = curr_x, curr_y
-            current_frame += num_move_frames
-            
-            # Play move SFX at impact
-            sfx_to_play = capture_sfx if is_capture else move_sfx
-            audio_events.append((current_frame / FPS, sfx_to_play))
-            
-            # Push move to board state
-            board.push(move)
-            
-            is_check = board.is_check()
-            is_mate = board.is_checkmate()
-            
-            if is_check:
-                sfx_to_play = check_sfx
-                audio_events.append((current_frame / FPS, sfx_to_play))
-
-            # Hold pose for voice clip duration
-            hold_frames = max(15, int(round(step_dur * FPS)) - num_move_frames)
-            highlights = {from_sq: "orig", to_sq: "dest"}
-            if is_mate or is_check:
-                k_sq = board.king(board.turn)
-                if k_sq is not None:
-                    highlights[k_sq] = "check"
-
-            for _ in range(hold_frames):
-                frame_actions.append({
-                    "board": board.copy(),
-                    "highlights": highlights,
-                    "moving_piece": None,
-                    "text": step_text
-                })
-            current_frame += hold_frames
-            
-            storyboard_segments.append({"type": "move", "move": move_str, "text": step_text, "duration": step_dur})
-
-        # 3. Outro (Clean, zero confetti)
-        outro_text = puzzle.get("outro_text", "What a clean tactical sequence!")
-        outro_wav = tmp_dir / "outro.wav"
-        make_voice_clip(outro_text, outro_wav, voice_index)
-        outro_dur = wav_duration(outro_wav)
-        outro_frames = max(45, int(round(outro_dur * FPS)))
+        from_sq = move.from_square
+        to_sq = move.to_square
+        is_capture = board.is_capture(move)
         
-        audio_events.append((current_frame / FPS, outro_wav))
-        audio_events.append((current_frame / FPS, game_over_sfx))
+        p_moving = board.piece_at(from_sq)
+        if not p_moving:
+            continue
+            
+        p_key = f"{'w' if p_moving.color == chess.WHITE else 'b'}{p_moving.symbol().lower()}"
         
-        # Checkmate King Red Background Highlight for Outro
-        final_highlights = {}
-        if board.is_checkmate() or board.is_check():
-            k_sq = board.king(board.turn)
-            if k_sq is not None:
-                final_highlights[k_sq] = "check"
-        if len(solution_moves) > 0:
-            try:
-                last_move = board.peek()
-                final_highlights[last_move.from_square] = "orig"
-                final_highlights[last_move.to_square] = "dest"
-            except Exception:
-                pass
-
-        for _ in range(outro_frames):
+        # Narration for move
+        step_text = commentary[commentary_idx] if commentary_idx < len(commentary) else f"And then, {board.san(move)}."
+        commentary_idx += 1
+        
+        step_wav = tmp_dir / f"step_{current_frame}.wav"
+        make_voice_clip(step_text, step_wav, voice_index)
+        step_dur = wav_duration(step_wav)
+        
+        audio_events.append((current_frame / FPS, step_wav))
+        
+        # Fast, smooth slide animation with Motion Blur (6 frames)
+        x1, y1, sq_sz = square_to_coords(from_sq, board_rect, flipped=flipped)
+        x2, y2, _ = square_to_coords(to_sq, board_rect, flipped=flipped)
+        
+        num_move_frames = 6
+        prev_x, prev_y = x1, y1
+        for f_i in range(num_move_frames):
+            t = f_i / float(num_move_frames - 1)
+            ease_t = t * t * (3.0 - 2.0 * t)  # SmoothStep curve
+            curr_x = x1 + (x2 - x1) * ease_t
+            curr_y = y1 + (y2 - y1) * ease_t
+            
             frame_actions.append({
                 "board": board.copy(),
-                "highlights": final_highlights,
-                "moving_piece": None,
-                "text": outro_text
+                "highlights": {from_sq: "orig", to_sq: "dest"},
+                "moving_piece": {
+                    "key": p_key,
+                    "x": curr_x,
+                    "y": curr_y,
+                    "prev_x": prev_x,
+                    "prev_y": prev_y,
+                    "skip_sq": from_sq
+                },
+                "text": step_text
             })
-        current_frame += outro_frames
+            prev_x, prev_y = curr_x, curr_y
+        current_frame += num_move_frames
         
-        total_duration = current_frame / FPS
-        return frame_actions, audio_events, total_duration, voice_index, storyboard_segments, board_rect, fen
+        # Play move SFX at impact
+        sfx_to_play = capture_sfx if is_capture else move_sfx
+        audio_events.append((current_frame / FPS, sfx_to_play))
+        
+        # Push move to board state
+        board.push(move)
+        
+        is_check = board.is_check()
+        is_mate = board.is_checkmate()
+        
+        if is_check:
+            sfx_to_play = check_sfx
+            audio_events.append((current_frame / FPS, sfx_to_play))
+
+        # Hold pose for voice clip duration
+        hold_frames = max(15, int(round(step_dur * FPS)) - num_move_frames)
+        highlights = {from_sq: "orig", to_sq: "dest"}
+        if is_mate or is_check:
+            k_sq = board.king(board.turn)
+            if k_sq is not None:
+                highlights[k_sq] = "check"
+
+        for _ in range(hold_frames):
+            frame_actions.append({
+                "board": board.copy(),
+                "highlights": highlights,
+                "moving_piece": None,
+                "text": step_text
+            })
+        current_frame += hold_frames
+        
+        storyboard_segments.append({"type": "move", "move": move_str, "text": step_text, "duration": step_dur})
+
+    # 3. Outro (Clean, zero confetti)
+    outro_text = puzzle.get("outro_text", "What a clean tactical sequence!")
+    outro_wav = tmp_dir / "outro.wav"
+    make_voice_clip(outro_text, outro_wav, voice_index)
+    outro_dur = wav_duration(outro_wav)
+    outro_frames = max(45, int(round(outro_dur * FPS)))
+    
+    audio_events.append((current_frame / FPS, outro_wav))
+    audio_events.append((current_frame / FPS, game_over_sfx))
+    
+    # Checkmate King Red Background Highlight for Outro
+    final_highlights = {}
+    if board.is_checkmate() or board.is_check():
+        k_sq = board.king(board.turn)
+        if k_sq is not None:
+            final_highlights[k_sq] = "check"
+    if len(solution_moves) > 0:
+        try:
+            last_move = board.peek()
+            final_highlights[last_move.from_square] = "orig"
+            final_highlights[last_move.to_square] = "dest"
+        except Exception:
+            pass
+
+    for _ in range(outro_frames):
+        frame_actions.append({
+            "board": board.copy(),
+            "highlights": final_highlights,
+            "moving_piece": None,
+            "text": outro_text
+        })
+    current_frame += outro_frames
+    
+    total_duration = current_frame / FPS
+    return frame_actions, audio_events, total_duration, voice_index, storyboard_segments, board_rect, fen
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
@@ -989,10 +986,9 @@ def main():
     
     print(f"Loaded Chess Puzzle: {puzzle['title']} (ID: {puzzle['id']})")
     
-    frame_actions, audio_events, total_duration, voice_index, storyboard_segments, board_rect, fen = generate_reel_timeline(puzzle)
-    
     with tempfile.TemporaryDirectory() as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
+        frame_actions, audio_events, total_duration, voice_index, storyboard_segments, board_rect, fen = generate_reel_timeline(puzzle, tmp_dir)
         master_wav = tmp_dir / "master_mix.wav"
         write_audio_timeline(audio_events, master_wav, total_duration)
         
