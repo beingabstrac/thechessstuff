@@ -240,7 +240,8 @@ def generate_human_narration(fen, solution_moves):
     outro = random.choice(outro_choices)
     return [opener] + steps, outro
 
-START_DATE = date(2007, 5, 1)
+HISTORICAL_PUZZLES_FILE = DATA_DIR / "historical_puzzles.json"
+START_DATE = date(2007, 5, 8)
 
 def format_pretty_date(d):
     return d.strftime("%B %d, %Y").replace(" 0", " ")
@@ -256,8 +257,8 @@ def fetch_historical_puzzle(target_date_str, fallback_index=0):
             for item in data:
                 if item.get("date") == target_date_str or (item.get("url") and target_date_str in item.get("url")):
                     return item
-            if data:
-                return data[fallback_index % len(data)]
+            if data and fallback_index < len(data):
+                return data[fallback_index]
     except Exception as e:
         print(f"Notice: Historical fetch for {target_date_str} ({e})")
     return None
@@ -278,8 +279,21 @@ def load_puzzle_data():
     p_date_str = format_pretty_date(p_date)
     target_date_str = p_date.strftime("%Y-%m-%d")
     
-    # 1. Fetch exact historical daily puzzle for this date
-    hist_puzzle = fetch_historical_puzzle(target_date_str, fallback_index=idx)
+    hist_puzzle = None
+    
+    # 1. Load from bundled local historical dataset first
+    if HISTORICAL_PUZZLES_FILE.exists():
+        try:
+            h_data = json.loads(HISTORICAL_PUZZLES_FILE.read_text(encoding="utf-8"))
+            if 0 <= idx < len(h_data):
+                hist_puzzle = h_data[idx]
+        except Exception as e:
+            print(f"Notice: local historical load ({e})")
+            
+    # 2. If not found locally, fetch online for target date
+    if not hist_puzzle:
+        hist_puzzle = fetch_historical_puzzle(target_date_str, fallback_index=idx)
+        
     if hist_puzzle and hist_puzzle.get("pgn"):
         pgn = hist_puzzle["pgn"]
         title = hist_puzzle.get("title", f"Tactical Puzzle #{p_num}")
@@ -300,11 +314,16 @@ def load_puzzle_data():
             
         if fen and moves_san and moves_uci:
             commentary, outro_text = generate_human_narration(fen, moves_san)
+            real_date_str = hist_puzzle.get("date", target_date_str)
+            try:
+                pretty_d = format_pretty_date(datetime.strptime(real_date_str, "%Y-%m-%d").date())
+            except Exception:
+                pretty_d = p_date_str
             return {
                 "id": p_num,
                 "num": p_num,
-                "date": target_date_str,
-                "date_str": p_date_str,
+                "date": real_date_str,
+                "date_str": pretty_d,
                 "title": title,
                 "difficulty": "Daily",
                 "fen": fen,
