@@ -528,7 +528,7 @@ def make_voice_clip(text, out_wav, voice_index=0):
 
     # 3. Try gTTS (Google Text-to-Speech) fallback (Cross-platform on Linux & Mac)
     try:
-        from gtts import gTTS
+        from gtts import gTTS  # type: ignore # pyrefly: ignore [missing-import]
         tts = gTTS(text=text, lang="en", tld="com")
         tts.save(mp3_tmp)
         if os.path.exists(mp3_tmp) and os.path.getsize(mp3_tmp) > 500:
