@@ -243,6 +243,23 @@ START_DATE = date(2007, 5, 1)
 def format_pretty_date(d):
     return d.strftime("%B %d, %Y").replace(" 0", " ")
 
+def fetch_historical_puzzle(target_date_str, fallback_index=0):
+    parts = target_date_str.split('-')
+    year, month = parts[0], parts[1]
+    url = f"https://raw.githubusercontent.com/samuraitruong/chess.com-daily-puzzle/main/puzzle/{year}/{year}-{month}.json"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            for item in data:
+                if item.get("date") == target_date_str or (item.get("url") and target_date_str in item.get("url")):
+                    return item
+            if data:
+                return data[fallback_index % len(data)]
+    except Exception as e:
+        print(f"Notice: Historical fetch for {target_date_str} ({e})")
+    return None
+
 def load_puzzle_data():
     prog = load_progress()
     next_offset = prog.get("next_offset", 0)
@@ -256,8 +273,46 @@ def load_puzzle_data():
     p_num = idx + 1
     p_date = START_DATE + timedelta(days=idx)
     p_date_str = format_pretty_date(p_date)
+    target_date_str = p_date.strftime("%Y-%m-%d")
     
-    # 1. Try Live/Random Chess.com API first for a fresh, unique puzzle
+    # 1. Fetch exact historical daily puzzle for this date
+    hist_puzzle = fetch_historical_puzzle(target_date_str, fallback_index=idx)
+    if hist_puzzle and hist_puzzle.get("pgn"):
+        pgn = hist_puzzle["pgn"]
+        title = hist_puzzle.get("title", f"Tactical Puzzle #{p_num}")
+        moves_uci = []
+        moves_san = []
+        fen = None
+        try:
+            game = chess.pgn.read_game(io.StringIO(pgn))
+            if game:
+                fen = game.board().fen()
+                b = game.board()
+                for move in game.mainline_moves():
+                    moves_san.append(b.san(move))
+                    moves_uci.append(move.uci())
+                    b.push(move)
+        except Exception as e:
+            print(f"Error parsing PGN: {e}")
+            
+        if fen and moves_san and moves_uci:
+            commentary, outro_text = generate_human_narration(fen, moves_san)
+            return {
+                "id": p_num,
+                "num": p_num,
+                "date": target_date_str,
+                "date_str": p_date_str,
+                "title": title,
+                "difficulty": "Daily",
+                "fen": fen,
+                "pgn": pgn,
+                "solution_moves": moves_uci,
+                "solution_moves_san": moves_san,
+                "commentary": commentary,
+                "outro_text": outro_text
+            }
+
+    # 2. Try Live/Random Chess.com API
     live = fetch_chess_com_puzzle()
     if live and "fen" in live and "pgn" in live:
         fen = live["fen"]
@@ -279,9 +334,9 @@ def load_puzzle_data():
         if moves_san and moves_uci:
             commentary, outro_text = generate_human_narration(fen, moves_san)
             return {
-                "id": live.get("publish_time", p_num),
+                "id": p_num,
                 "num": p_num,
-                "date": p_date.strftime("%Y-%m-%d"),
+                "date": target_date_str,
                 "date_str": p_date_str,
                 "title": title,
                 "difficulty": "Daily",
@@ -293,7 +348,7 @@ def load_puzzle_data():
                 "outro_text": outro_text
             }
 
-    # 2. Fallback to local curated puzzles pool if API is unreachable
+    # 3. Fallback to local curated puzzles pool
     puzzles = json.loads(PUZZLES_FILE.read_text(encoding="utf-8"))
     p_item = puzzles[idx % len(puzzles)]
     fen = p_item.get("setup_fen", p_item.get("fen", chess.STARTING_FEN))
@@ -303,7 +358,7 @@ def load_puzzle_data():
     return {
         "id": p_item.get("id", p_num),
         "num": p_num,
-        "date": p_date.strftime("%Y-%m-%d"),
+        "date": target_date_str,
         "date_str": p_date_str,
         "title": p_item["title"],
         "difficulty": p_item.get("difficulty", "Easy"),
