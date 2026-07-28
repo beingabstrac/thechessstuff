@@ -631,33 +631,32 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
                     
             board_surface.paste(p_img, (int(mx), int(my)), p_img)
 
-    # 6. Draw Coordinate Labels ON TOP (1-8 on left of file A/H, a-h/h-a on bottom of rank 1/8)
+    # 6. Draw Coordinate Labels ON TOP (1-8 on left, a-h on bottom)
     coord_font = font(26, bold=True)
     
-    # Rank Numbers (1-8 or 8-1 on left edge, top-left corner of each square)
-    for i in range(8):
-        rank_val = i + 1 if flipped else rank_val if 'rank_val' in locals() else (i + 1)
-        num_str = str(i + 1 if flipped else i + 1)
-        # For rank rendering
-        display_rank = i if flipped else 7 - i
-        num_str = str(i + 1 if flipped else i + 1)
-        # Pull inward so it clears top-left 28px rounded corner mask
-        x_local = 14 if i == 0 else 10
-        y_local = (i if flipped else 7 - i) * sq_size + (10 if i == 7 and not flipped or i == 0 and flipped else 6)
-        is_light = (i + 0) % 2 == 0
+    # Rank Numbers (1-8 on left edge)
+    for row in range(8):
+        rank_num = row + 1 if flipped else 8 - row
+        r_str = str(rank_num)
+        x_local = 14 if row == 0 else 10
+        y_local = row * sq_size + (10 if row == 0 else 6)
+        file_for_color = 7 if flipped else 0
+        rank_for_color = row if flipped else 7 - row
+        is_light = (rank_for_color + file_for_color) % 2 == 0
         text_color = COLOR_SQUARE_DARK if is_light else COLOR_SQUARE_LIGHT
-        # Correct rank display string
-        r_num = str(i + 1)
-        b_draw.text((x_local, y_local), r_num, fill=text_color, font=coord_font)
+        b_draw.text((x_local, y_local), r_str, fill=text_color, font=coord_font)
         
-    # File Letters (a-h or h-a on bottom edge)
+    # File Letters (a-h on bottom edge)
     files = ["h", "g", "f", "e", "d", "c", "b", "a"] if flipped else ["a", "b", "c", "d", "e", "f", "g", "h"]
-    for file_idx, f_char in enumerate(files):
-        x_offset = 32 if file_idx == 7 else 26
-        y_offset = 36 if file_idx == 7 else 32
-        x_local = (file_idx + 1) * sq_size - x_offset
+    for col, f_char in enumerate(files):
+        x_offset = 32 if col == 7 else 26
+        y_offset = 36 if col == 7 else 32
+        x_local = (col + 1) * sq_size - x_offset
         y_local = 8 * sq_size - y_offset
-        is_light = (0 + file_idx) % 2 == 0
+        row_for_color = 7
+        file_for_color = 7 - col if flipped else col
+        rank_for_color = row_for_color if flipped else 7 - row_for_color
+        is_light = (rank_for_color + file_for_color) % 2 == 0
         text_color = COLOR_SQUARE_DARK if is_light else COLOR_SQUARE_LIGHT
         b_draw.text((x_local, y_local), f_char, fill=text_color, font=coord_font)
 
@@ -696,26 +695,24 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
 
     return img
 
-def main():
-    OUT.mkdir(parents=True, exist_ok=True)
-    puzzle = load_puzzle_data()
-    
-    print(f"Loaded Chess Puzzle: {puzzle['title']} (ID: {puzzle['id']})")
-    
-    # Initialize Chess Board
+def generate_reel_timeline(puzzle):
     fen = puzzle.get("setup_fen", puzzle.get("fen", chess.STARTING_FEN))
     board = chess.Board(fen)
+    b_start = chess.Board(fen)
+    flipped = (b_start.turn == chess.BLACK)
     
-    board_rect = [60, (H - 960) // 2, 960] # centered board (left=60, top=480, size=960)
+    voice_index = random.randint(0, len(EDGE_VOICES) - 1)
     
-    # Setup temporary directory for wav audio clips
+    left = (W - 954) // 2
+    top = (H - 954) // 2
+    board_rect = (left, top, 954)
+    
+    frame_actions = []
+    audio_events = []
+    
     with tempfile.TemporaryDirectory() as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
         
-        voice_index = random.randint(0, len(EDGE_VOICES) - 1)
-        audio_events = []
-        frame_actions = []
-
         move_sfx = SOUNDS_DIR / "move.wav"
         capture_sfx = SOUNDS_DIR / "capture.wav"
         check_sfx = SOUNDS_DIR / "check.wav"
@@ -780,8 +777,8 @@ def main():
             audio_events.append((current_frame / FPS, step_wav))
             
             # Fast, smooth slide animation with Motion Blur (6 frames)
-            x1, y1, sq_sz = square_to_coords(from_sq, board_rect)
-            x2, y2, _ = square_to_coords(to_sq, board_rect)
+            x1, y1, sq_sz = square_to_coords(from_sq, board_rect, flipped=flipped)
+            x2, y2, _ = square_to_coords(to_sq, board_rect, flipped=flipped)
             
             num_move_frames = 6
             prev_x, prev_y = x1, y1
@@ -874,10 +871,21 @@ def main():
         current_frame += outro_frames
         
         total_duration = current_frame / FPS
+        return frame_actions, audio_events, total_duration, voice_index, storyboard_segments, board_rect, fen
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    puzzle = load_puzzle_data()
+    
+    print(f"Loaded Chess Puzzle: {puzzle['title']} (ID: {puzzle['id']})")
+    
+    frame_actions, audio_events, total_duration, voice_index, storyboard_segments, board_rect, fen = generate_reel_timeline(puzzle)
+    
+    with tempfile.TemporaryDirectory() as tmp_dir_str:
+        tmp_dir = Path(tmp_dir_str)
         master_wav = tmp_dir / "master_mix.wav"
         write_audio_timeline(audio_events, master_wav, total_duration)
         
-        # 5. Render Frame Images
         frames_dir = tmp_dir / "frames"
         frames_dir.mkdir(parents=True, exist_ok=True)
         b_init = chess.Board(fen)
@@ -919,7 +927,6 @@ def main():
         }
         STORY_OUT.write_text(json.dumps(storyboard_data, indent=2), encoding="utf-8")
         
-        # 6. Encode Video with FFmpeg
         cmd_video = [
             "ffmpeg", "-y",
             "-r", str(FPS),
