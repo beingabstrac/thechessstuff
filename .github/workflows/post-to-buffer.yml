@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       fill_count:
-        description: "How many reels to create and add to Buffer"
+        description: "How many reels to create and add to Buffer (default: 10)"
         required: false
         default: "10"
+      puzzle_number:
+        description: "Specific puzzle number to generate (e.g. 6 for #6, leave blank for auto queue)"
+        required: false
+        default: ""
   schedule:
     # Keeps Buffer topped up every 2 hours. Buffer decides actual publish times.
     - cron: "0 */2 * * *"
@@ -30,6 +34,7 @@ jobs:
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
       QUEUE_FILL_COUNT: ${{ github.event.inputs.fill_count || '10' }}
+      TARGET_PUZZLE: ${{ github.event.inputs.puzzle_number }}
       IGNORE_QUEUE_FULL: "1"
 
     steps:
@@ -52,22 +57,29 @@ jobs:
 
       - name: Render and Queue Loop
         run: |
-          count="${QUEUE_FILL_COUNT:-10}"
-          case "$count" in
-            ''|*[!0-9]*) count=10 ;;
-          esac
-          if [ "$count" -lt 1 ]; then count=1; fi
-          if [ "$count" -gt 10 ]; then count=10; fi
-          for i in $(seq 1 "$count"); do
-            echo "--- Rendering and Queueing Chess Reel $i of $count ---"
-            ./scripts/render.sh
+          target="${TARGET_PUZZLE:-}"
+          if [ -n "$target" ]; then
+            echo "--- Generating Specific Requested Puzzle #$target ---"
+            FORCE_PUZZLE="$target" ./scripts/render.sh
             python scripts/post_to_buffer.py
-            if [ -f outputs/queue_full ]; then
-              echo "Buffer queue is full (10 slots filled); stopping top-up loop."
-              break
-            fi
-            python scripts/advance_progress.py
-          done
+          else
+            count="${QUEUE_FILL_COUNT:-10}"
+            case "$count" in
+              ''|*[!0-9]*) count=10 ;;
+            esac
+            if [ "$count" -lt 1 ]; then count=1; fi
+            if [ "$count" -gt 10 ]; then count=10; fi
+            for i in $(seq 1 "$count"); do
+              echo "--- Rendering and Queueing Chess Reel $i of $count ---"
+              ./scripts/render.sh
+              python scripts/post_to_buffer.py
+              if [ -f outputs/queue_full ]; then
+                echo "Buffer queue is full (10 slots filled); stopping top-up loop."
+                break
+              fi
+              python scripts/advance_progress.py
+            done
+          fi
 
       - name: Commit and Push Progress State
         run: |

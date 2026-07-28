@@ -266,9 +266,10 @@ def load_puzzle_data():
     prog = load_progress()
     next_offset = prog.get("next_offset", 0)
     
-    force_idx = os.getenv("FORCE_PUZZLE")
-    if force_idx is not None and force_idx.isdigit():
-        idx = int(force_idx)
+    force_val = os.getenv("FORCE_PUZZLE")
+    if force_val is not None and force_val.strip().isdigit():
+        val = int(force_val.strip())
+        idx = val - 1 if val >= 1 else val
     else:
         idx = next_offset
         
