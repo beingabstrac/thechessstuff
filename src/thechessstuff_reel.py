@@ -741,12 +741,12 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
                     
             board_surface.paste(p_img, (int(mx), int(my)), p_img)
 
-    # 6. Draw Coordinate Labels ON TOP (1-8 on left, a-h on bottom)
+    # 6. Draw Coordinate Labels ON TOP (Always fixed a-h on bottom, 8-1 on left)
     coord_font = font(26, bold=True)
     
-    # Rank Numbers (1-8 on left edge)
+    # Rank Numbers (8-1 on left edge)
     for row in range(8):
-        rank_num = row + 1 if flipped else 8 - row
+        rank_num = 8 - row
         r_str = str(rank_num)
         x_local = 14 if row == 0 else 10
         y_local = row * sq_size + (10 if row == 0 else 6)
@@ -757,7 +757,7 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
         b_draw.text((x_local, y_local), r_str, fill=text_color, font=coord_font)
         
     # File Letters (a-h on bottom edge)
-    files = ["h", "g", "f", "e", "d", "c", "b", "a"] if flipped else ["a", "b", "c", "d", "e", "f", "g", "h"]
+    files = ["a", "b", "c", "d", "e", "f", "g", "h"]
     for col, f_char in enumerate(files):
         x_offset = 32 if col == 7 else 26
         y_offset = 36 if col == 7 else 32
