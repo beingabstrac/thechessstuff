@@ -809,7 +809,7 @@ def generate_reel_timeline(puzzle, tmp_dir):
     fen = puzzle.get("setup_fen", puzzle.get("fen", chess.STARTING_FEN))
     board = chess.Board(fen)
     b_start = chess.Board(fen)
-    flipped = False  # Standard orientation: a-h left-to-right, 8-1 top-to-bottom
+    flipped = (b_start.turn == chess.BLACK)
     
     voice_index = random.randint(0, len(EDGE_VOICES) - 1)
     
@@ -1015,7 +1015,7 @@ def main():
                 particles=act.get("particles"),
                 title_info=title_info,
                 move_pgn_text=act.get("text", ""),
-                flipped=False
+                flipped=(b_init.turn == chess.BLACK)
             )
             img.save(frames_dir / f"frame_{idx:05d}.png")
             
