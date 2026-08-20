@@ -674,7 +674,7 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
             row = rank if flipped else 7 - rank
             x = col * sq_size
             y = row * sq_size
-            is_light = (rank + file) % 2 == 0
+            is_light = (rank + file) % 2 == 1
             color = COLOR_SQUARE_LIGHT if is_light else COLOR_SQUARE_DARK
             b_draw.rectangle([x, y, x + sq_size, y + sq_size], fill=color)
 
@@ -752,7 +752,7 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
         y_local = row * sq_size + (10 if row == 0 else 6)
         file_for_color = 7 if flipped else 0
         rank_for_color = row if flipped else 7 - row
-        is_light = (rank_for_color + file_for_color) % 2 == 0
+        is_light = (rank_for_color + file_for_color) % 2 == 1
         text_color = COLOR_SQUARE_DARK if is_light else COLOR_SQUARE_LIGHT
         b_draw.text((x_local, y_local), r_str, fill=text_color, font=coord_font)
         
@@ -766,7 +766,7 @@ def draw_chess_frame(board, board_rect, highlights=None, moving_piece=None, badg
         row_for_color = 7
         file_for_color = 7 - col if flipped else col
         rank_for_color = row_for_color if flipped else 7 - row_for_color
-        is_light = (rank_for_color + file_for_color) % 2 == 0
+        is_light = (rank_for_color + file_for_color) % 2 == 1
         text_color = COLOR_SQUARE_DARK if is_light else COLOR_SQUARE_LIGHT
         b_draw.text((x_local, y_local), f_char, fill=text_color, font=coord_font)
 
